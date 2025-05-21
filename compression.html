@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>SAQ Image Compression Demo</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(to bottom, #fdfde6, #fefca8);
+      text-align: center;
+      padding: 2rem;
+    }
+    h1 {
+      color: #222;
+      margin-bottom: 1rem;
+    }
+    .controls {
+      background: white;
+      padding: 1rem 2rem;
+      border-radius: 12px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 1rem;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+      margin-bottom: 2rem;
+      flex-wrap: wrap;
+    }
+    .panel {
+      display: flex;
+      justify-content: center;
+      gap: 2rem;
+      flex-wrap: wrap;
+    }
+    .card {
+      background: white;
+      padding: 1rem;
+      border-radius: 12px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    canvas {
+      border-radius: 8px;
+      max-width: 100%;
+      background: white;
+    }
+    label {
+      font-weight: bold;
+    }
+    select, input[type="file"] {
+      font-size: 1rem;
+      padding: 0.3rem;
+    }
+    .slider-label {
+      font-weight: bold;
+    }
+    .recon-title {
+      white-space: pre-line;
+    }
+  </style>
+</head>
+<body>
+  <h1>SAQ Image Compression Demo</h1>
+
+  <div class="controls">
+    <label>Upload Image:
+      <input type="file" id="upload" accept="image/*">
+    </label>
+
+    <label>Bit Depth:
+      <span id="bitDepthLabel">8</span>
+    </label>
+    <input type="range" id="bitDepth" min="1" max="8" value="8">
+
+    <label>
+      <input type="checkbox" id="grayscale"> Grayscale
+    </label>
+  </div>
+
+  <div class="panel">
+    <div class="card">
+      <h3>Original Image</h3>
+      <canvas id="originalCanvas" width="300" height="300"></canvas>
+      <p>Original Size: <span id="originalSize">0</span> KB</p>
+    </div>
+
+    <div class="card">
+      <h3>Compressed Output</h3>
+      <canvas id="compressedCanvas" width="300" height="300"></canvas>
+      <p>Compressed Size: <span id="compressedSize">0</span> KB</p>
+    </div>
+  </div>
+
+  <script>
+    const upload = document.getElementById('upload');
+    const originalCanvas = document.getElementById('originalCanvas');
+    const compressedCanvas = document.getElementById('compressedCanvas');
+    const bitDepth = document.getElementById('bitDepth');
+    const bitDepthLabel = document.getElementById('bitDepthLabel');
+    const grayscaleToggle = document.getElementById('grayscale');
+    const originalSizeDisplay = document.getElementById('originalSize');
+    const compressedSizeDisplay = document.getElementById('compressedSize');
+
+    const oCtx = originalCanvas.getContext('2d');
+    const cCtx = compressedCanvas.getContext('2d');
+
+    let imageData;
+
+    function quantize(value, bits) {
+      const levels = Math.pow(2, bits);
+      return Math.round(value / 255 * (levels - 1)) * (255 / (levels - 1));
+    }
+
+    function compressImage(bits, toGray) {
+      if (!imageData) return;
+
+      const compressed = cCtx.createImageData(imageData.width, imageData.height);
+      const data = imageData.data;
+      const cData = compressed.data;
+
+      for (let i = 0; i < data.length; i += 4) {
+        let r = data[i], g = data[i+1], b = data[i+2], a = data[i+3];
+
+        if (toGray) {
+          const gray = 0.299*r + 0.587*g + 0.114*b;
+          const q = quantize(gray, bits);
+          cData[i] = cData[i+1] = cData[i+2] = q;
+        } else {
+          cData[i] = quantize(r, bits);
+          cData[i+1] = quantize(g, bits);
+          cData[i+2] = quantize(b, bits);
+        }
+
+        cData[i+3] = a;
+      }
+
+      cCtx.putImageData(compressed, 0, 0);
+      updateSizes();
+    }
+
+    function updateSizes() {
+      function estimateSize(canvas) {
+        return Math.round(canvas.toDataURL("image/png").length * 0.75 / 1024);
+      }
+
+      originalSizeDisplay.textContent = estimateSize(originalCanvas);
+      compressedSizeDisplay.textContent = estimateSize(compressedCanvas);
+    }
+
+    bitDepth.addEventListener('input', () => {
+      bitDepthLabel.textContent = bitDepth.value;
+      compressImage(parseInt(bitDepth.value), grayscaleToggle.checked);
+    });
+
+    grayscaleToggle.addEventListener('change', () => {
+      compressImage(parseInt(bitDepth.value), grayscaleToggle.checked);
+    });
+
+    upload.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+
+      reader.onload = function(event) {
+        const img = new Image();
+        img.onload = function() {
+          originalCanvas.width = img.width;
+          originalCanvas.height = img.height;
+          compressedCanvas.width = img.width;
+          compressedCanvas.height = img.height;
+
+          oCtx.drawImage(img, 0, 0);
+          imageData = oCtx.getImageData(0, 0, img.width, img.height);
+          compressImage(parseInt(bitDepth.value), grayscaleToggle.checked);
+        };
+        img.src = event.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+    oCtx.fillStyle = 'white';
+    oCtx.fillRect(0, 0, originalCanvas.width, originalCanvas.height);
+    cCtx.fillStyle = 'white';
+    cCtx.fillRect(0, 0, compressedCanvas.width, compressedCanvas.height);
+  </script>
+</body>
+</html>
